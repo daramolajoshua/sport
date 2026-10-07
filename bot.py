@@ -1,75 +1,93 @@
 import os
 import logging
-from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram import Bot
+from telegram.ext import Application, CommandHandler
+from telegram.ext import ContextTypes
+import asyncio
 
 # Enable logging
-logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+)
+logger = logging.getLogger(__name__)
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-CHANNEL_ID = os.getenv("CHANNEL_ID")  # e.g., @your_channel_username
+# Environment variables from Railway
+TOKEN = os.getenv("BOT_TOKEN")
+CHANNEL_ID = os.getenv("CHANNEL_ID", "@ApexForex_bot")  # Your channel or group username/ID
 
-# --- Startup Task (Runs immediately upon deployment) ---
-async def post_startup_message(application: Application):
-    """Sends a message to your channel the exact second the bot deploys and starts."""
-    if CHANNEL_ID:
-        try:
-            startup_text = "🚀 *SportBot is now online and deployed successfully!*\n\nReady to fetch live scores, fixtures, and standings."
-            await application.bot.send_message(chat_id=CHANNEL_ID, text=startup_text, parse_mode="Markdown")
-            print("Startup notification sent to channel successfully!")
-        except Exception as e:
-            print(f"Failed to send startup message: {e}")
+DISCLAIMER = "\n\n⚠️ *Disclaimer:* For informational and educational purposes only. Not financial advice."
 
-# --- Commands ---
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = (
-        "🏆 *Welcome to SportBot!*\n\n"
-        "Here are your commands:\n"
-        "⚽ /live - View live scores\n"
-        "📅 /fixtures - Today's matches\n"
-        "📊 /standings - League tables\n"
-        "📢 /post - Test channel broadcast"
+async def start(update, context):
+    await update.message.reply_text(
+        "Welcome to ApexForex_bot! 📈\n"
+        "Your real-time forex market assistant. Track live currency pairs, get pip updates, market alerts, and instant session data.\n"
+        "Use /rates for live currency updates or /calendar for economic events."
+        f"{DISCLAIMER}", parse_mode="Markdown"
     )
-    await update.message.reply_text(msg, parse_mode="Markdown")
 
-async def live_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🔴 *Live Matches:*\n\n• Arsenal 2 - 1 Chelsea (78')\n• Lakers 102 - 98 Celtics (Q4)", parse_mode="Markdown")
+async def rates(update, context):
+    text = (
+        "📈 *Live Currency Exchange Rates*\n\n"
+        "• *EUR/USD*: 1.0942 (+0.15%)\n"
+        "• *GBP/USD*: 1.3120 (-0.08%)\n"
+        "• *USD/JPY*: 149.85 (+0.32%)\n"
+        f"{DISCLAIMER}"
+    )
+    await update.message.reply_text(text, parse_mode="Markdown")
 
-async def fixtures_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("📅 *Today's Fixtures:*\n\n• Real Madrid vs Barcelona - 20:00 UTC", parse_mode="Markdown")
+async def calendar(update, context):
+    text = (
+        "📅 *Economic Calendar (Today)*\n\n"
+        "🔴 *USD* - Non-Farm Employment Change (12:30 GMT)\n"
+        "🟡 *EUR* - German Retail Sales (06:00 GMT)\n"
+        f"{DISCLAIMER}"
+    )
+    await update.message.reply_text(text, parse_mode="Markdown")
 
-async def standings_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("📊 *Top Standings:*\n1. Man City | 64 pts\n2. Arsenal | 62 pts", parse_mode="Markdown")
+async def sessions(update, context):
+    text = (
+        "🌍 *Global Trading Sessions*\n\n"
+        "🟢 *London Session*: OPEN\n"
+        "🟢 *New York Session*: OPEN\n"
+        "🔴 *Sydney Session*: CLOSED\n"
+        f"{DISCLAIMER}"
+    )
+    await update.message.reply_text(text, parse_mode="Markdown")
 
-async def post_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Instantly posts an update to your connected Telegram channel on command"""
-    if not CHANNEL_ID:
-        await update.message.reply_text("❌ CHANNEL_ID variable is not set on Railway!")
-        return
-    
-    broadcast_msg = "🚨 *SportBot Automated Update*\n\n⚽ Goal! Real Madrid takes the lead! (1-0)"
+# Automated broadcast job running every 25 minutes (1500 seconds)
+async def broadcast_market_update(context: ContextTypes.DEFAULT_TYPE):
+    broadcast_text = (
+        "⚡ *ApexFX Auto Market Update*\n\n"
+        "• *EUR/USD*: 1.0942\n"
+        "• *GBP/USD*: 1.3120\n"
+        "• *Market Status*: London & New York Sessions Active.\n"
+        f"{DISCLAIMER}"
+    )
     try:
-        await context.bot.send_message(chat_id=CHANNEL_ID, text=broadcast_msg, parse_mode="Markdown")
-        await update.message.reply_text("✅ Successfully posted to the channel!")
+        await context.bot.send_message(chat_id=CHANNEL_ID, text=broadcast_text, parse_mode="Markdown")
+        logger.info("Automatic 25-minute market update broadcasted successfully.")
     except Exception as e:
-        await update.message.reply_text(f"❌ Failed to post: {e}")
+        logger.error(f"Failed to broadcast update: {e}")
 
 def main():
-    if not BOT_TOKEN:
-        raise ValueError("No BOT_TOKEN environment variable found!")
+    if not TOKEN:
+        logger.error("No BOT_TOKEN environment variable found!")
+        return
 
-    # Build application and hook the startup function via post_init
-    app = Application.builder().token(BOT_TOKEN).post_init(post_startup_message).build()
+    application = Application.builder().token(TOKEN).build()
 
-    # Register command handlers
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("live", live_command))
-    app.add_handler(CommandHandler("fixtures", fixtures_command))
-    app.add_handler(CommandHandler("standings", standings_command))
-    app.add_handler(CommandHandler("post", post_command))
+    # Command Handlers
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("rates", rates))
+    application.add_handler(CommandHandler("calendar", calendar))
+    application.add_handler(CommandHandler("sessions", sessions))
 
-    print("SportBot is running...")
-    app.run_polling()
+    # Job Queue for 25-minute automated channel posts (1500 seconds)
+    if application.job_queue:
+        application.job_queue.run_repeating(broadcast_market_update, interval=1500, first=10)
+
+    logger.info("ApexForex_bot is starting...")
+    application.run_polling()
 
 if __name__ == "__main__":
     main()
